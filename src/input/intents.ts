@@ -1,16 +1,16 @@
 // Input intents are the boundary between raw devices and gameplay. Devices
-// (keyboard, gamepad, network input later) translate their state into an
-// InputSnapshot once per frame; this module writes that snapshot into the
-// entity's intent components. Gameplay systems read the components — they
-// never look at the raw devices, which keeps gameplay headless-testable and
-// makes remapping/rollback easier later.
+// (currently keyboard) translate their state into an InputSnapshot once per
+// frame; this module writes that snapshot into the entity's intent components.
+// Gameplay systems read the components — they never look at the raw devices,
+// which keeps gameplay headless-testable and makes remapping/rollback easier
+// later. Attack intents arrive in Phase 4 alongside the combat system that
+// actually consumes them.
 
 import type { World, EntityId } from '@core/world';
 
 export const INTENT = {
   Move: 'intent.move',
   Jump: 'intent.jump',
-  Attack: 'intent.attack',
 } as const;
 
 export type IntentKey = (typeof INTENT)[keyof typeof INTENT];
@@ -35,36 +35,16 @@ export function makeJumpIntent(pressed = false): JumpIntent {
   return { pressed };
 }
 
-export interface AttackIntent {
-  light: boolean;
-  heavy: boolean;
-}
-
-export function makeAttackIntent(light = false, heavy = false): AttackIntent {
-  return { light, heavy };
-}
-
 // Device-agnostic per-frame button state.
 export interface InputSnapshot {
   left: boolean;
   right: boolean;
   jump: boolean;
-  attackLight: boolean;
-  attackHeavy: boolean;
 }
 
 export function applyInputToIntents(world: World, entity: EntityId, snap: InputSnapshot): void {
-  const move = world.getComponent<MoveIntent>(entity, INTENT.Move);
-  if (move) {
-    move.x = (snap.right ? 1 : 0) - (snap.left ? 1 : 0);
-  }
-  const jump = world.getComponent<JumpIntent>(entity, INTENT.Jump);
-  if (jump) {
-    jump.pressed = snap.jump;
-  }
-  const attack = world.getComponent<AttackIntent>(entity, INTENT.Attack);
-  if (attack) {
-    attack.light = snap.attackLight;
-    attack.heavy = snap.attackHeavy;
-  }
+  const move = world.getComponent<MoveIntent>(entity, INTENT.Move)!;
+  move.x = (snap.right ? 1 : 0) - (snap.left ? 1 : 0);
+  const jump = world.getComponent<JumpIntent>(entity, INTENT.Jump)!;
+  jump.pressed = snap.jump;
 }

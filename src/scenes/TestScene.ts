@@ -16,7 +16,6 @@ import {
   INTENT,
   makeMoveIntent,
   makeJumpIntent,
-  makeAttackIntent,
   applyInputToIntents,
   type MoveIntent,
   type JumpIntent,
@@ -60,7 +59,7 @@ export class TestScene extends Phaser.Scene {
     this.debug = new DebugOverlay(this);
 
     this.add
-      .text(640, 40, 'Arrows move + jump · Z/X attack (no effect yet) · F1 debug', {
+      .text(640, 40, 'Arrows move + jump · F1 debug', {
         font: '16px monospace',
         color: '#aaaaaa',
       })
@@ -87,7 +86,6 @@ export class TestScene extends Phaser.Scene {
     this.world.addComponent(id, COMPONENT.Sprite, makeSprite('rect', { tint: 0xcc3333, depth: 1 }));
     this.world.addComponent(id, INTENT.Move, makeMoveIntent());
     this.world.addComponent(id, INTENT.Jump, makeJumpIntent());
-    this.world.addComponent(id, INTENT.Attack, makeAttackIntent());
     return id;
   }
 
