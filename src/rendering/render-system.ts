@@ -1,7 +1,9 @@
-// Phaser adapter that mirrors ECS state into the scene. For the placeholder art
-// phase, every Sprite becomes a tinted rectangle sized from its Collider (or a
-// default 24x24 if no Collider). When real textures arrive in Phase 1.5 / Phase
-// 10, swap the rectangle for `scene.add.sprite(...)` keyed by `Sprite.textureKey`.
+// Phaser adapter that mirrors ECS state into the scene. Each Sprite + Transform
+// entity becomes a Phaser.GameObjects.Sprite, scaled to the entity's Collider
+// (or a 24×24 default) and tinted. The texture key on the Sprite component must
+// exist in the scene's texture cache — usually populated by BootScene preloading
+// from `src/content/assets.ts`. A missing key is a setup bug; we throw so it
+// surfaces immediately instead of silently rendering nothing.
 
 import Phaser from 'phaser';
 import type { World, EntityId } from '@core/world';
@@ -15,16 +17,16 @@ import {
 const DEFAULT_SIZE = 24;
 
 export class RenderSystem {
-  private readonly displays = new Map<EntityId, Phaser.GameObjects.Rectangle>();
+  private readonly displays = new Map<EntityId, Phaser.GameObjects.Sprite>();
 
   constructor(private readonly scene: Phaser.Scene) {}
 
   sync(world: World): void {
     const renderable = new Set(world.query(COMPONENT.Sprite, COMPONENT.Transform));
 
-    for (const [id, rect] of this.displays) {
+    for (const [id, display] of this.displays) {
       if (!renderable.has(id)) {
-        rect.destroy();
+        display.destroy();
         this.displays.delete(id);
       }
     }
@@ -32,28 +34,37 @@ export class RenderSystem {
     for (const id of renderable) {
       const transform = world.getComponent<Transform>(id, COMPONENT.Transform)!;
       const sprite = world.getComponent<Sprite>(id, COMPONENT.Sprite)!;
-      let rect = this.displays.get(id);
-      if (!rect) {
+      let display = this.displays.get(id);
+      if (!display) {
         const collider = world.getComponent<Collider>(id, COMPONENT.Collider);
-        rect = this.scene.add.rectangle(
-          transform.x,
-          transform.y,
-          collider?.width ?? DEFAULT_SIZE,
-          collider?.height ?? DEFAULT_SIZE,
-          sprite.tint,
-        );
-        this.displays.set(id, rect);
+        display = this.mount(sprite, transform, collider);
+        this.displays.set(id, display);
       }
-      rect.x = transform.x;
-      rect.y = transform.y;
-      rect.rotation = transform.rotation;
-      rect.fillColor = sprite.tint;
-      rect.setDepth(sprite.depth);
+      display.x = transform.x;
+      display.y = transform.y;
+      display.rotation = transform.rotation;
+      display.setDepth(sprite.depth);
+      display.setTint(sprite.tint);
     }
   }
 
   destroy(): void {
-    for (const rect of this.displays.values()) rect.destroy();
+    for (const display of this.displays.values()) display.destroy();
     this.displays.clear();
+  }
+
+  private mount(
+    sprite: Sprite,
+    transform: Transform,
+    collider: Collider | undefined,
+  ): Phaser.GameObjects.Sprite {
+    if (!this.scene.textures.exists(sprite.textureKey)) {
+      throw new Error(`RenderSystem: texture '${sprite.textureKey}' is not loaded`);
+    }
+    const width = collider?.width ?? DEFAULT_SIZE;
+    const height = collider?.height ?? DEFAULT_SIZE;
+    const s = this.scene.add.sprite(transform.x, transform.y, sprite.textureKey);
+    s.setDisplaySize(width, height);
+    return s;
   }
 }
