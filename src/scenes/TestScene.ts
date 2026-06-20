@@ -12,6 +12,15 @@ import {
   type Velocity,
 } from '@core/components';
 import { RenderSystem } from '@rendering/render-system';
+import {
+  INTENT,
+  makeMoveIntent,
+  makeJumpIntent,
+  applyInputToIntents,
+  type MoveIntent,
+  type JumpIntent,
+} from '@input/intents';
+import { KeyboardInputSource, PLAYER1_KEYBOARD } from '@input/keyboard-input-source';
 
 // Tunables for the placeholder demo. Real physics constants live in Phase 2.
 const GRAVITY = 1200;
@@ -22,15 +31,15 @@ const GROUND_H = 40;
 const PLAYER_W = 32;
 const PLAYER_H = 48;
 
-// Placeholder scene: confirms the ECS → RenderSystem → Phaser bridge works.
-// Movement logic is inlined here on purpose — it will be replaced by proper
-// systems in Phase 1.4 (input intents) and Phase 2 (character controller).
+// Placeholder scene: confirms the input intent → ECS → render bridge works.
+// Inline movement here is temporary; it gets replaced by a proper character
+// controller in Phase 2.
 export class TestScene extends Phaser.Scene {
   private world!: World;
   private renderSystem!: RenderSystem;
   private player!: EntityId;
   private bouncer!: EntityId;
-  private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private p1Input!: KeyboardInputSource;
   private debug!: DebugOverlay;
 
   constructor() {
@@ -41,18 +50,16 @@ export class TestScene extends Phaser.Scene {
     this.world = new World();
     this.renderSystem = new RenderSystem(this);
 
-    // Static visual ground. Not yet an ECS entity — the platformer collision
-    // pass in Phase 2 will turn the level into proper tilemap data.
     this.add.rectangle(640, GROUND_Y, 1280, GROUND_H, 0x444444);
 
     this.player = this.spawnPlayer();
     this.bouncer = this.spawnBouncer();
 
-    this.cursors = this.input.keyboard!.createCursorKeys();
+    this.p1Input = new KeyboardInputSource(this, PLAYER1_KEYBOARD);
     this.debug = new DebugOverlay(this);
 
     this.add
-      .text(640, 40, 'ECS-driven render · arrow keys move player · F1 debug', {
+      .text(640, 40, 'Arrows move + jump · F1 debug', {
         font: '16px monospace',
         color: '#aaaaaa',
       })
@@ -64,8 +71,8 @@ export class TestScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     const dt = Math.min(deltaMs / 1000, 0.05);
-    this.readInputIntoVelocity();
-    this.stepMovement(dt);
+    applyInputToIntents(this.world, this.player, this.p1Input.read());
+    this.stepPlayerMovement(dt);
     this.stepBouncer(dt);
     this.renderSystem.sync(this.world);
     this.debug.update();
@@ -77,6 +84,8 @@ export class TestScene extends Phaser.Scene {
     this.world.addComponent(id, COMPONENT.Velocity, makeVelocity());
     this.world.addComponent(id, COMPONENT.Collider, makeCollider(PLAYER_W, PLAYER_H));
     this.world.addComponent(id, COMPONENT.Sprite, makeSprite('rect', { tint: 0xcc3333, depth: 1 }));
+    this.world.addComponent(id, INTENT.Move, makeMoveIntent());
+    this.world.addComponent(id, INTENT.Jump, makeJumpIntent());
     return id;
   }
 
@@ -89,31 +98,25 @@ export class TestScene extends Phaser.Scene {
     return id;
   }
 
-  private readInputIntoVelocity(): void {
-    const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
+  private stepPlayerMovement(dt: number): void {
     const transform = this.world.getComponent<Transform>(this.player, COMPONENT.Transform)!;
+    const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
+    const move = this.world.getComponent<MoveIntent>(this.player, INTENT.Move)!;
+    const jump = this.world.getComponent<JumpIntent>(this.player, INTENT.Jump)!;
+
     const groundTop = GROUND_Y - GROUND_H / 2 - PLAYER_H / 2;
     const grounded = transform.y >= groundTop - 0.5;
 
-    if (this.cursors.left?.isDown) vel.x = -MOVE_SPEED;
-    else if (this.cursors.right?.isDown) vel.x = MOVE_SPEED;
-    else vel.x = 0;
-
-    if (this.cursors.up && Phaser.Input.Keyboard.JustDown(this.cursors.up) && grounded) {
+    vel.x = move.x * MOVE_SPEED;
+    if (jump.pressed && grounded) {
       vel.y = JUMP_VELOCITY;
       eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
     }
-  }
-
-  private stepMovement(dt: number): void {
-    const transform = this.world.getComponent<Transform>(this.player, COMPONENT.Transform)!;
-    const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
 
     vel.y += GRAVITY * dt;
     transform.x += vel.x * dt;
     transform.y += vel.y * dt;
 
-    const groundTop = GROUND_Y - GROUND_H / 2 - PLAYER_H / 2;
     if (transform.y > groundTop) {
       transform.y = groundTop;
       vel.y = 0;
