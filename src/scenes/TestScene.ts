@@ -21,7 +21,6 @@ import {
   type JumpIntent,
 } from '@input/intents';
 import { KeyboardInputSource, PLAYER1_KEYBOARD } from '@input/keyboard-input-source';
-import { TEXTURE_KEYS } from '@content/assets';
 
 // Tunables for the placeholder demo. Real physics constants live in Phase 2.
 const GRAVITY = 1200;
@@ -84,7 +83,7 @@ export class TestScene extends Phaser.Scene {
     this.world.addComponent(id, COMPONENT.Transform, makeTransform(200, 200));
     this.world.addComponent(id, COMPONENT.Velocity, makeVelocity());
     this.world.addComponent(id, COMPONENT.Collider, makeCollider(PLAYER_W, PLAYER_H));
-    this.world.addComponent(id, COMPONENT.Sprite, makeSprite(TEXTURE_KEYS.Placeholder, { tint: 0xcc3333, depth: 1 }));
+    this.world.addComponent(id, COMPONENT.Sprite, makeSprite('rect', { tint: 0xcc3333, depth: 1 }));
     this.world.addComponent(id, INTENT.Move, makeMoveIntent());
     this.world.addComponent(id, INTENT.Jump, makeJumpIntent());
     return id;
@@ -95,7 +94,7 @@ export class TestScene extends Phaser.Scene {
     this.world.addComponent(id, COMPONENT.Transform, makeTransform(900, 360));
     this.world.addComponent(id, COMPONENT.Velocity, makeVelocity(140, -90));
     this.world.addComponent(id, COMPONENT.Collider, makeCollider(28, 28));
-    this.world.addComponent(id, COMPONENT.Sprite, makeSprite(TEXTURE_KEYS.Placeholder, { tint: 0x33aaff, depth: 1 }));
+    this.world.addComponent(id, COMPONENT.Sprite, makeSprite('rect', { tint: 0x33aaff, depth: 1 }));
     return id;
   }
 

@@ -1,6 +1,4 @@
 import Phaser from 'phaser';
-import { ASSETS } from '@content/assets';
-import { preloadAssets } from '@content/asset-loader';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -8,7 +6,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    preloadAssets(this.load, ASSETS);
+    // Global asset preloads land here as content arrives.
   }
 
   create(): void {
