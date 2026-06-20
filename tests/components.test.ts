@@ -10,11 +10,11 @@ import { World } from '../src/core/world';
 import type { Transform, Velocity } from '../src/core/components';
 
 describe('component keys', () => {
-  it('exposes stable namespaced string keys', () => {
-    expect(COMPONENT.Transform).toBe('component.transform');
-    expect(COMPONENT.Velocity).toBe('component.velocity');
-    expect(COMPONENT.Collider).toBe('component.collider');
-    expect(COMPONENT.Sprite).toBe('component.sprite');
+  it('exposes stable string keys under the core. module prefix', () => {
+    expect(COMPONENT.Transform).toBe('core.transform');
+    expect(COMPONENT.Velocity).toBe('core.velocity');
+    expect(COMPONENT.Collider).toBe('core.collider');
+    expect(COMPONENT.Sprite).toBe('core.sprite');
   });
 });
 
