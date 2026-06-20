@@ -4,9 +4,9 @@
 // `core/` stays the shared ECS substrate, free of domain concerns.
 
 export const PHYSICS_COMPONENT = {
-  Gravity: 'component.gravity',
-  Drag: 'component.drag',
-  TerminalVelocity: 'component.terminal-velocity',
+  Gravity: 'physics.gravity',
+  Drag: 'physics.drag',
+  TerminalVelocity: 'physics.terminal-velocity',
 } as const;
 
 export type PhysicsComponentKey = (typeof PHYSICS_COMPONENT)[keyof typeof PHYSICS_COMPONENT];

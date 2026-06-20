@@ -7,10 +7,10 @@ import {
 } from '../src/physics/components';
 
 describe('PHYSICS_COMPONENT keys', () => {
-  it('exposes namespaced string keys matching the @core convention', () => {
-    expect(PHYSICS_COMPONENT.Gravity).toBe('component.gravity');
-    expect(PHYSICS_COMPONENT.Drag).toBe('component.drag');
-    expect(PHYSICS_COMPONENT.TerminalVelocity).toBe('component.terminal-velocity');
+  it('exposes string keys under the physics. module prefix', () => {
+    expect(PHYSICS_COMPONENT.Gravity).toBe('physics.gravity');
+    expect(PHYSICS_COMPONENT.Drag).toBe('physics.drag');
+    expect(PHYSICS_COMPONENT.TerminalVelocity).toBe('physics.terminal-velocity');
   });
 });
 

@@ -3,10 +3,10 @@
 // default values across the codebase.
 
 export const COMPONENT = {
-  Transform: 'component.transform',
-  Velocity: 'component.velocity',
-  Collider: 'component.collider',
-  Sprite: 'component.sprite',
+  Transform: 'core.transform',
+  Velocity: 'core.velocity',
+  Collider: 'core.collider',
+  Sprite: 'core.sprite',
 } as const;
 
 export type ComponentKey = (typeof COMPONENT)[keyof typeof COMPONENT];
