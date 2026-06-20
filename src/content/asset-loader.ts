@@ -9,7 +9,7 @@ export interface AssetLoaderApi {
 }
 
 export function preloadAssets(loader: AssetLoaderApi, manifest: AssetManifest): void {
-  for (const entry of manifest.images) {
+  for (const entry of manifest) {
     loader.image(entry.key, entry.url);
   }
 }
