@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   aabbFromTransformCollider,
-  aabbIntersects,
   resolveAabbMove,
   type AABB,
 } from '../src/physics/aabb';
@@ -29,26 +28,6 @@ describe('aabbFromTransformCollider', () => {
       halfWidth: 16,
       halfHeight: 24,
     });
-  });
-});
-
-describe('aabbIntersects', () => {
-  it('returns true when boxes overlap', () => {
-    const a: AABB = { x: 0, y: 0, halfWidth: 10, halfHeight: 10 };
-    const b: AABB = { x: 5, y: 5, halfWidth: 10, halfHeight: 10 };
-    expect(aabbIntersects(a, b)).toBe(true);
-  });
-
-  it('returns false when boxes are clearly apart', () => {
-    const a: AABB = { x: 0, y: 0, halfWidth: 10, halfHeight: 10 };
-    const b: AABB = { x: 25, y: 0, halfWidth: 10, halfHeight: 10 };
-    expect(aabbIntersects(a, b)).toBe(false);
-  });
-
-  it('returns false when edges just touch (exclusive)', () => {
-    const a: AABB = { x: 0, y: 0, halfWidth: 10, halfHeight: 10 };
-    const b: AABB = { x: 20, y: 0, halfWidth: 10, halfHeight: 10 };
-    expect(aabbIntersects(a, b)).toBe(false);
   });
 });
 

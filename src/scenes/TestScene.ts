@@ -150,7 +150,6 @@ export class TestScene extends Phaser.Scene {
     if (jump.pressed && this.playerGrounded) {
       vel.y = JUMP_VELOCITY;
       eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
-      this.playerGrounded = false;
     }
     vel.y += GRAVITY * dt;
 

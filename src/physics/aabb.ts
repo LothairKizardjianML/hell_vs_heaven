@@ -1,9 +1,11 @@
 // Axis-aligned bounding box collision against a Tilemap. Resolution runs each
-// axis independently (X first, then Y) — the canonical platformer pattern.
-// Each axis sweeps from the starting edge to the destination edge tile-by-tile
-// so fast-moving objects don't tunnel through walls. A small EPS keeps the
-// resolved AABB strictly outside the tile face, so the next frame's broad-
-// phase doesn't immediately re-collide.
+// axis independently (X first, then Y) — the canonical platformer pattern. A
+// single `sweepAxis` helper handles both directions on both axes; the four
+// branches differ only in (a) which AABB edge leads, (b) which tilemap axis to
+// scan, and (c) which collision flag to set. The sweep walks tile-by-tile from
+// the leading edge's old position to its new position so fast-moving objects
+// don't tunnel through walls. A small EPS keeps the resolved AABB strictly
+// outside the tile face so the next frame doesn't immediately re-collide.
 
 import type { Transform, Collider } from '@core/components';
 import type { Tilemap } from './tilemap';
@@ -38,13 +40,6 @@ export function aabbFromTransformCollider(transform: Transform, collider: Collid
   };
 }
 
-export function aabbIntersects(a: AABB, b: AABB): boolean {
-  return (
-    Math.abs(a.x - b.x) < a.halfWidth + b.halfWidth &&
-    Math.abs(a.y - b.y) < a.halfHeight + b.halfHeight
-  );
-}
-
 export function resolveAabbMove(
   aabb: AABB,
   dx: number,
@@ -53,68 +48,48 @@ export function resolveAabbMove(
 ): ResolveResult {
   const flags: CollisionFlags = { left: false, right: false, top: false, bottom: false };
   const size = tilemap.tileSize;
-  let x = aabb.x + dx;
-  let y = aabb.y;
 
-  if (dx > 0) {
-    const oldRight = aabb.x + aabb.halfWidth;
-    const newRight = x + aabb.halfWidth;
-    const startCol = Math.floor(oldRight / size);
-    const endCol = Math.floor(newRight / size);
-    const topRow = Math.floor((y - aabb.halfHeight) / size);
-    const bottomRow = Math.floor((y + aabb.halfHeight - EPS) / size);
-    for (let col = startCol; col <= endCol; col++) {
-      if (anyRowSolid(tilemap, col, topRow, bottomRow)) {
-        x = col * size - aabb.halfWidth - EPS;
-        flags.right = true;
-        break;
-      }
-    }
-  } else if (dx < 0) {
-    const oldLeft = aabb.x - aabb.halfWidth;
-    const newLeft = x - aabb.halfWidth;
-    const startCol = Math.floor(oldLeft / size);
-    const endCol = Math.floor(newLeft / size);
-    const topRow = Math.floor((y - aabb.halfHeight) / size);
-    const bottomRow = Math.floor((y + aabb.halfHeight - EPS) / size);
-    for (let col = startCol; col >= endCol; col--) {
-      if (anyRowSolid(tilemap, col, topRow, bottomRow)) {
-        x = (col + 1) * size + aabb.halfWidth + EPS;
-        flags.left = true;
-        break;
-      }
+  let x = aabb.x + dx;
+  if (dx !== 0) {
+    const dir: 1 | -1 = dx > 0 ? 1 : -1;
+    const leadOffset = dir * aabb.halfWidth;
+    const perpMin = Math.floor((aabb.y - aabb.halfHeight) / size);
+    const perpMax = Math.floor((aabb.y + aabb.halfHeight - EPS) / size);
+    const result = sweepAxis({
+      leadEdgeOld: aabb.x + leadOffset,
+      leadEdgeNew: x + leadOffset,
+      perpMin,
+      perpMax,
+      tileSize: size,
+      direction: dir,
+      isSolidAt: (lead, perp) => tilemap.isSolid(lead, perp),
+    });
+    if (result.hit) {
+      x = result.blockedLeadEdge - leadOffset;
+      if (dir > 0) flags.right = true;
+      else flags.left = true;
     }
   }
 
-  y = aabb.y + dy;
-
-  if (dy > 0) {
-    const oldBottom = aabb.y + aabb.halfHeight;
-    const newBottom = y + aabb.halfHeight;
-    const startRow = Math.floor(oldBottom / size);
-    const endRow = Math.floor(newBottom / size);
-    const leftCol = Math.floor((x - aabb.halfWidth) / size);
-    const rightCol = Math.floor((x + aabb.halfWidth - EPS) / size);
-    for (let row = startRow; row <= endRow; row++) {
-      if (anyColSolid(tilemap, row, leftCol, rightCol)) {
-        y = row * size - aabb.halfHeight - EPS;
-        flags.bottom = true;
-        break;
-      }
-    }
-  } else if (dy < 0) {
-    const oldTop = aabb.y - aabb.halfHeight;
-    const newTop = y - aabb.halfHeight;
-    const startRow = Math.floor(oldTop / size);
-    const endRow = Math.floor(newTop / size);
-    const leftCol = Math.floor((x - aabb.halfWidth) / size);
-    const rightCol = Math.floor((x + aabb.halfWidth - EPS) / size);
-    for (let row = startRow; row >= endRow; row--) {
-      if (anyColSolid(tilemap, row, leftCol, rightCol)) {
-        y = (row + 1) * size + aabb.halfHeight + EPS;
-        flags.top = true;
-        break;
-      }
+  let y = aabb.y + dy;
+  if (dy !== 0) {
+    const dir: 1 | -1 = dy > 0 ? 1 : -1;
+    const leadOffset = dir * aabb.halfHeight;
+    const perpMin = Math.floor((x - aabb.halfWidth) / size);
+    const perpMax = Math.floor((x + aabb.halfWidth - EPS) / size);
+    const result = sweepAxis({
+      leadEdgeOld: aabb.y + leadOffset,
+      leadEdgeNew: y + leadOffset,
+      perpMin,
+      perpMax,
+      tileSize: size,
+      direction: dir,
+      isSolidAt: (lead, perp) => tilemap.isSolid(perp, lead),
+    });
+    if (result.hit) {
+      y = result.blockedLeadEdge - leadOffset;
+      if (dir > 0) flags.bottom = true;
+      else flags.top = true;
     }
   }
 
@@ -124,16 +99,39 @@ export function resolveAabbMove(
   };
 }
 
-function anyRowSolid(tm: Tilemap, col: number, topRow: number, bottomRow: number): boolean {
-  for (let row = topRow; row <= bottomRow; row++) {
-    if (tm.isSolid(col, row)) return true;
-  }
-  return false;
+interface SweepArgs {
+  leadEdgeOld: number;
+  leadEdgeNew: number;
+  perpMin: number;
+  perpMax: number;
+  tileSize: number;
+  direction: 1 | -1;
+  isSolidAt: (leadTile: number, perpTile: number) => boolean;
 }
 
-function anyColSolid(tm: Tilemap, row: number, leftCol: number, rightCol: number): boolean {
-  for (let col = leftCol; col <= rightCol; col++) {
-    if (tm.isSolid(col, row)) return true;
+interface SweepResult {
+  hit: boolean;
+  blockedLeadEdge: number;
+}
+
+function sweepAxis(args: SweepArgs): SweepResult {
+  const startTile = Math.floor(args.leadEdgeOld / args.tileSize);
+  const endTile = Math.floor(args.leadEdgeNew / args.tileSize);
+  for (
+    let lead = startTile;
+    args.direction > 0 ? lead <= endTile : lead >= endTile;
+    lead += args.direction
+  ) {
+    for (let perp = args.perpMin; perp <= args.perpMax; perp++) {
+      if (args.isSolidAt(lead, perp)) {
+        // Snap leading edge to the side of the tile we approached from.
+        // Forward: tile's near face = lead * size; back off by EPS so the AABB
+        // sits strictly outside. Backward: tile's far face = (lead+1) * size;
+        // push out by EPS in the opposite direction.
+        const face = args.direction > 0 ? lead * args.tileSize : (lead + 1) * args.tileSize;
+        return { hit: true, blockedLeadEdge: face - args.direction * EPS };
+      }
+    }
   }
-  return false;
+  return { hit: false, blockedLeadEdge: args.leadEdgeNew };
 }
