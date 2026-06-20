@@ -11,41 +11,39 @@ import {
   type Transform,
   type Collider,
 } from '@core/components';
-import { RenderableTracker } from './renderable-tracker';
 
 const DEFAULT_SIZE = 24;
 
 export class RenderSystem {
-  private readonly tracker = new RenderableTracker();
   private readonly displays = new Map<EntityId, Phaser.GameObjects.Rectangle>();
 
   constructor(private readonly scene: Phaser.Scene) {}
 
   sync(world: World): void {
-    for (const id of this.tracker.pickRemovals(world)) {
-      this.displays.get(id)?.destroy();
-      this.displays.delete(id);
-      this.tracker.markDetached(id);
+    const renderable = new Set(world.query(COMPONENT.Sprite, COMPONENT.Transform));
+
+    for (const [id, rect] of this.displays) {
+      if (!renderable.has(id)) {
+        rect.destroy();
+        this.displays.delete(id);
+      }
     }
 
-    for (const id of this.tracker.pickAdditions(world)) {
-      const sprite = world.getComponent<Sprite>(id, COMPONENT.Sprite)!;
-      const transform = world.getComponent<Transform>(id, COMPONENT.Transform)!;
-      const collider = world.getComponent<Collider>(id, COMPONENT.Collider);
-      const width = collider?.width ?? DEFAULT_SIZE;
-      const height = collider?.height ?? DEFAULT_SIZE;
-      const rect = this.scene.add.rectangle(transform.x, transform.y, width, height, sprite.tint);
-      rect.setRotation(transform.rotation);
-      rect.setDepth(sprite.depth);
-      this.displays.set(id, rect);
-      this.tracker.markAttached(id);
-    }
-
-    for (const id of this.tracker.attachedIds()) {
-      const rect = this.displays.get(id);
-      if (!rect) continue;
+    for (const id of renderable) {
       const transform = world.getComponent<Transform>(id, COMPONENT.Transform)!;
       const sprite = world.getComponent<Sprite>(id, COMPONENT.Sprite)!;
+      let rect = this.displays.get(id);
+      if (!rect) {
+        const collider = world.getComponent<Collider>(id, COMPONENT.Collider);
+        rect = this.scene.add.rectangle(
+          transform.x,
+          transform.y,
+          collider?.width ?? DEFAULT_SIZE,
+          collider?.height ?? DEFAULT_SIZE,
+          sprite.tint,
+        );
+        this.displays.set(id, rect);
+      }
       rect.x = transform.x;
       rect.y = transform.y;
       rect.rotation = transform.rotation;
