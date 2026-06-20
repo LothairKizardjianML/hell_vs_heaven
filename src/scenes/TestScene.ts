@@ -25,9 +25,15 @@ import { KeyboardInputSource, PLAYER1_KEYBOARD } from '@input/keyboard-input-sou
 import { TEXTURE_KEYS } from '@content/assets';
 import { Tilemap } from '@physics/tilemap';
 import { aabbFromTransformCollider, resolveAabbMove } from '@physics/aabb';
+import {
+  PHYSICS_COMPONENT,
+  makeGravity,
+  makeDrag,
+  makeTerminalVelocity,
+} from '@physics/components';
+import { integrateVelocity } from '@physics/integrator';
 
 // Tunables for the placeholder demo. Real physics constants live in Phase 2.x.
-const GRAVITY = 1200;
 const MOVE_SPEED = 220;
 const JUMP_VELOCITY = -560;
 const PLAYER_W = 32;
@@ -37,9 +43,9 @@ const TILE_SIZE = 32;
 const STAGE_COLS = 40;
 const STAGE_ROWS = 22;
 
-// Placeholder scene: confirms the input intent → ECS → tilemap collision →
-// render bridge works. Inline movement here is temporary; it gets replaced by
-// a proper character controller in later Phase 2 subtasks.
+// Placeholder scene. The integrator now owns gravity + drag + terminal-velocity
+// for any entity that opts in via the matching components. The character
+// controller (Phase 2.3+) will replace the inline input-driven velocity below.
 export class TestScene extends Phaser.Scene {
   private world!: World;
   private renderSystem!: RenderSystem;
@@ -67,7 +73,7 @@ export class TestScene extends Phaser.Scene {
     this.debug = new DebugOverlay(this);
 
     this.add
-      .text(640, 24, 'Arrows move + jump · Land on the platform · F1 debug', {
+      .text(640, 24, 'Arrows move + jump · release to slide · F1 debug', {
         font: '16px monospace',
         color: '#aaaaaa',
       })
@@ -80,6 +86,7 @@ export class TestScene extends Phaser.Scene {
   update(_time: number, deltaMs: number): void {
     const dt = Math.min(deltaMs / 1000, 0.05);
     applyInputToIntents(this.world, this.player, this.p1Input.read());
+    integrateVelocity(this.world, dt);
     this.stepPlayerMovement(dt);
     this.stepBouncer(dt);
     this.renderSystem.sync(this.world);
@@ -91,9 +98,7 @@ export class TestScene extends Phaser.Scene {
     for (let r = 0; r < STAGE_ROWS; r++) {
       grid.push(new Array(STAGE_COLS).fill(0));
     }
-    // Solid floor along the bottom row.
     for (let c = 0; c < STAGE_COLS; c++) grid[STAGE_ROWS - 1]![c] = 1;
-    // Mid-air platform — somewhere to jump up onto.
     for (let c = 20; c <= 27; c++) grid[14]![c] = 1;
     return new Tilemap(grid, TILE_SIZE);
   }
@@ -123,6 +128,13 @@ export class TestScene extends Phaser.Scene {
     );
     this.world.addComponent(id, INTENT.Move, makeMoveIntent());
     this.world.addComponent(id, INTENT.Jump, makeJumpIntent());
+    this.world.addComponent(id, PHYSICS_COMPONENT.Gravity, makeGravity(1200));
+    this.world.addComponent(id, PHYSICS_COMPONENT.Drag, makeDrag(8));
+    this.world.addComponent(
+      id,
+      PHYSICS_COMPONENT.TerminalVelocity,
+      makeTerminalVelocity(Infinity, 1500),
+    );
     return id;
   }
 
@@ -146,12 +158,14 @@ export class TestScene extends Phaser.Scene {
     const move = this.world.getComponent<MoveIntent>(this.player, INTENT.Move)!;
     const jump = this.world.getComponent<JumpIntent>(this.player, INTENT.Jump)!;
 
-    vel.x = move.x * MOVE_SPEED;
+    // Input overrides drag while a direction is held. Releasing input leaves
+    // vel.x non-zero so the integrator's Drag bleeds it off across a few
+    // frames — Brawlhalla-style slide rather than instant stop.
+    if (move.x !== 0) vel.x = move.x * MOVE_SPEED;
     if (jump.pressed && this.playerGrounded) {
       vel.y = JUMP_VELOCITY;
       eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
     }
-    vel.y += GRAVITY * dt;
 
     const aabb = aabbFromTransformCollider(transform, collider);
     const { resolved, flags } = resolveAabbMove(aabb, vel.x * dt, vel.y * dt, this.tilemap);
@@ -164,8 +178,6 @@ export class TestScene extends Phaser.Scene {
     this.playerGrounded = flags.bottom;
   }
 
-  // Bouncer remains physics-free — it's a visual sanity check that the
-  // RenderSystem still syncs every Sprite+Transform entity, not just the player.
   private stepBouncer(dt: number): void {
     const t = this.world.getComponent<Transform>(this.bouncer, COMPONENT.Transform)!;
     const v = this.world.getComponent<Velocity>(this.bouncer, COMPONENT.Velocity)!;
