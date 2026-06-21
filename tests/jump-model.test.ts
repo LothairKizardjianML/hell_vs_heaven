@@ -83,6 +83,20 @@ describe('jump model', () => {
     expect(stepJump(jc, { held: true, grounded: false, vy: 100 }).jumped).toBe(false); // none left
   });
 
+  it('does not half-cut a buffered jump that fires on the same frame the button is released', () => {
+    // Capped in the air, the player buffers a jump, then releases on the exact
+    // frame they land. That frame the ground refills jumps and the live buffer
+    // fires the ground jump — but `released` is also true, so a naive cut would
+    // halve a jump that only just launched. The launch must win.
+    const jc = makeJumpController({ maxJumps: 1, jumpVelocity: -500, cutMultiplier: 0.5, bufferFrames: 6 });
+    stepJump(jc, { held: true, grounded: true, vy: 0 }); // ground jump, jumps spent
+    stepJump(jc, { held: false, grounded: false, vy: -400 }); // release midair
+    stepJump(jc, { held: true, grounded: false, vy: 200 }); // re-press, capped → buffers, no fire
+    const land = stepJump(jc, { held: false, grounded: true, vy: 0 }); // release + land same frame
+    expect(land.jumped).toBe(true);
+    expect(land.vy).toBe(-500); // full height, not -250
+  });
+
   it('resets the jump count when grounded again', () => {
     const jc = makeJumpController({ maxJumps: 1 });
     stepJump(jc, { held: true, grounded: true, vy: 0 }); // jump

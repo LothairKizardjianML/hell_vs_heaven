@@ -146,11 +146,7 @@ export class TestScene extends Phaser.Scene {
       PHYSICS_COMPONENT.CharacterController,
       makeCharacterController(),
     );
-    this.world.addComponent(
-      id,
-      PHYSICS_COMPONENT.JumpController,
-      makeJumpController({ jumpVelocity: -560, maxJumps: 2 }),
-    );
+    this.world.addComponent(id, PHYSICS_COMPONENT.JumpController, makeJumpController());
     return id;
   }
 

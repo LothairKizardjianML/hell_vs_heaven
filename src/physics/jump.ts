@@ -57,8 +57,10 @@ export function stepJump(jc: JumpController, input: JumpInput): JumpResult {
     jumped = true;
   }
 
-  // Variable height: a release while still ascending trims the arc.
-  if (released && vy < 0) vy *= jc.cutMultiplier;
+  // Variable height: a release while still ascending trims the arc. Skip a jump
+  // that launched this same frame — a buffered jump firing on the release frame
+  // (e.g. release + land coincide) must keep its full height, not get halved.
+  if (released && !jumped && vy < 0) vy *= jc.cutMultiplier;
 
   jc.prevHeld = input.held;
   return { vy, jumped };
