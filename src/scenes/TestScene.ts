@@ -23,7 +23,7 @@ import {
 } from '@input/intents';
 import { KeyboardInputSource, PLAYER1_KEYBOARD } from '@input/keyboard-input-source';
 import { TEXTURE_KEYS } from '@content/assets';
-import { Tilemap, TILE } from '@physics/tilemap';
+import { Tilemap, TILE, type TileId } from '@physics/tilemap';
 import { aabbFromTransformCollider, resolveAabbMove } from '@physics/aabb';
 import {
   PHYSICS_COMPONENT,
@@ -91,9 +91,9 @@ export class TestScene extends Phaser.Scene {
   }
 
   private buildStageTilemap(): Tilemap {
-    const grid: number[][] = [];
+    const grid: TileId[][] = [];
     for (let r = 0; r < STAGE_ROWS; r++) {
-      grid.push(new Array(STAGE_COLS).fill(TILE.Empty));
+      grid.push(new Array<TileId>(STAGE_COLS).fill(TILE.Empty));
     }
     for (let c = 0; c < STAGE_COLS; c++) grid[STAGE_ROWS - 1]![c] = TILE.Solid;
     for (let c = 20; c <= 27; c++) grid[14]![c] = TILE.Solid;

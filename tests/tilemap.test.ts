@@ -28,15 +28,15 @@ describe('Tilemap', () => {
   it('tileAt returns the tile id', () => {
     const tm = new Tilemap(
       [
-        [0, 1],
-        [2, 3],
+        [TILE.Empty, TILE.Solid],
+        [TILE.OneWayUp, TILE.Empty],
       ],
       16,
     );
-    expect(tm.tileAt(0, 0)).toBe(0);
-    expect(tm.tileAt(1, 0)).toBe(1);
-    expect(tm.tileAt(0, 1)).toBe(2);
-    expect(tm.tileAt(1, 1)).toBe(3);
+    expect(tm.tileAt(0, 0)).toBe(TILE.Empty);
+    expect(tm.tileAt(1, 0)).toBe(TILE.Solid);
+    expect(tm.tileAt(0, 1)).toBe(TILE.OneWayUp);
+    expect(tm.tileAt(1, 1)).toBe(TILE.Empty);
   });
 
   it('tileAt returns 0 for out-of-bounds coords (treated as empty)', () => {

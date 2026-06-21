@@ -18,7 +18,7 @@ export const TILE = {
 
 export type TileId = (typeof TILE)[keyof typeof TILE];
 
-export type TileGrid = ReadonlyArray<ReadonlyArray<number>>;
+export type TileGrid = ReadonlyArray<ReadonlyArray<TileId>>;
 
 export class Tilemap {
   constructor(
@@ -42,8 +42,8 @@ export class Tilemap {
     return this.rows * this.tileSize;
   }
 
-  tileAt(col: number, row: number): number {
-    if (col < 0 || row < 0 || col >= this.cols || row >= this.rows) return 0;
+  tileAt(col: number, row: number): TileId {
+    if (col < 0 || row < 0 || col >= this.cols || row >= this.rows) return TILE.Empty;
     return this.tiles[row]![col]!;
   }
 
