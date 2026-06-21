@@ -9,6 +9,7 @@ export const PHYSICS_COMPONENT = {
   TerminalVelocity: 'physics.terminal-velocity',
   CharacterController: 'physics.character-controller',
   JumpController: 'physics.jump-controller',
+  MovementController: 'physics.movement-controller',
 } as const;
 
 export type PhysicsComponentKey = (typeof PHYSICS_COMPONENT)[keyof typeof PHYSICS_COMPONENT];
@@ -83,6 +84,31 @@ export function makeJumpController(overrides: Partial<JumpController> = {}): Jum
     coyoteTimer: 0,
     bufferTimer: 0,
     prevHeld: false,
+    ...overrides,
+  };
+}
+
+// Horizontal movement tuning. Pure data; `stepHorizontalMove` in `movement.ts`
+// eases vx toward `moveX * maxSpeed`. Separate ground/air accel + decel give the
+// Brawlhalla feel: snappy on the ground, floaty and momentum-heavy in the air.
+// All accelerations are world units per second squared.
+export interface MovementController {
+  maxSpeed: number;
+  groundAccel: number; // speeding up toward target while grounded
+  groundDecel: number; // slowing to rest (no input) while grounded
+  airAccel: number; // speeding up toward target while airborne
+  airDecel: number; // slowing to rest (no input) while airborne
+}
+
+export function makeMovementController(
+  overrides: Partial<MovementController> = {},
+): MovementController {
+  return {
+    maxSpeed: 220,
+    groundAccel: 2000,
+    groundDecel: 2600,
+    airAccel: 1400,
+    airDecel: 800,
     ...overrides,
   };
 }
