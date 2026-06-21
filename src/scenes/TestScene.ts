@@ -32,13 +32,16 @@ import {
   makeCharacterController,
   makeJumpController,
   makeMovementController,
+  makeWallController,
   type CharacterController,
   type JumpController,
   type MovementController,
+  type WallController,
 } from '@physics/components';
 import { integrateVelocity } from '@physics/integrator';
 import { stepJump } from '@physics/jump';
 import { stepHorizontalMove } from '@physics/movement';
+import { stepWall } from '@physics/wall';
 
 const PLAYER_W = 32;
 const PLAYER_H = 48;
@@ -73,7 +76,7 @@ export class TestScene extends Phaser.Scene {
     this.debug = new DebugOverlay(this);
 
     this.add
-      .text(640, 24, 'Arrows move · Up to jump (double-jump + coyote) · blue = pass-through · F1 debug', {
+      .text(640, 24, 'Arrows move · Up to jump (double-jump + coyote) · hug a wall to slide, Up to wall-jump · F1 debug', {
         font: '16px monospace',
         color: '#aaaaaa',
       })
@@ -87,7 +90,9 @@ export class TestScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.05);
     applyInputToIntents(this.world, this.player, this.p1Input.read());
     integrateVelocity(this.world, dt);
-    this.stepPlayerJump();
+    // Wall jump owns the press when on a wall; only fall through to the normal
+    // jump model if it did not fire.
+    if (!this.stepPlayerWall()) this.stepPlayerJump();
     this.stepPlayerMovement(dt);
     this.stepBouncer(dt);
     this.renderSystem.sync(this.world);
@@ -103,6 +108,8 @@ export class TestScene extends Phaser.Scene {
     for (let c = 20; c <= 27; c++) grid[14]![c] = TILE.Solid;
     // One-way platform — jump up through it from below, land on it from above.
     for (let c = 8; c <= 15; c++) grid[10]![c] = TILE.OneWayUp;
+    // Tall pillar — slide down its faces and wall-jump between them.
+    for (let r = 6; r < STAGE_ROWS - 1; r++) grid[r]![30] = TILE.Solid;
     return new Tilemap(grid, TILE_SIZE);
   }
 
@@ -148,6 +155,7 @@ export class TestScene extends Phaser.Scene {
     );
     this.world.addComponent(id, PHYSICS_COMPONENT.JumpController, makeJumpController());
     this.world.addComponent(id, PHYSICS_COMPONENT.MovementController, makeMovementController());
+    this.world.addComponent(id, PHYSICS_COMPONENT.WallController, makeWallController());
     return id;
   }
 
@@ -162,6 +170,47 @@ export class TestScene extends Phaser.Scene {
       makeSprite(TEXTURE_KEYS.Placeholder, { tint: 0x33aaff, depth: 1 }),
     );
     return id;
+  }
+
+  // Wall slide + wall jump. Reads last frame's wall contact (one frame stale,
+  // like grounded) and the held jump button. On a wall jump it sets vx/vy away
+  // from the wall and swallows the press so the jump model below can't also
+  // fire it; returns whether the wall jump fired.
+  private stepPlayerWall(): boolean {
+    const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
+    const move = this.world.getComponent<MoveIntent>(this.player, INTENT.Move)!;
+    const jump = this.world.getComponent<JumpIntent>(this.player, INTENT.Jump)!;
+    const cc = this.world.getComponent<CharacterController>(
+      this.player,
+      PHYSICS_COMPONENT.CharacterController,
+    )!;
+    const wc = this.world.getComponent<WallController>(
+      this.player,
+      PHYSICS_COMPONENT.WallController,
+    )!;
+
+    const res = stepWall(wc, {
+      wallSide: cc.wallSide,
+      moveX: move.x,
+      grounded: cc.grounded,
+      jumpHeld: jump.pressed,
+      vx: vel.x,
+      vy: vel.y,
+    });
+    vel.x = res.vx;
+    vel.y = res.vy;
+
+    if (res.jumped) {
+      // Keep the jump model from re-firing the same press as an air jump.
+      const jc = this.world.getComponent<JumpController>(
+        this.player,
+        PHYSICS_COMPONENT.JumpController,
+      )!;
+      jc.prevHeld = jump.pressed;
+      jc.bufferTimer = 0;
+      eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
+    }
+    return res.jumped;
   }
 
   // Reads the held jump button + last frame's ground contact and applies the
@@ -219,6 +268,7 @@ export class TestScene extends Phaser.Scene {
     if (flags.bottom || flags.top) vel.y = 0;
     if (flags.left || flags.right) vel.x = 0;
     cc.grounded = flags.bottom;
+    cc.wallSide = flags.right ? 1 : flags.left ? -1 : 0;
   }
 
   private stepBouncer(dt: number): void {

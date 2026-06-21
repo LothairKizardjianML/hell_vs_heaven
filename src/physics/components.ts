@@ -10,6 +10,7 @@ export const PHYSICS_COMPONENT = {
   CharacterController: 'physics.character-controller',
   JumpController: 'physics.jump-controller',
   MovementController: 'physics.movement-controller',
+  WallController: 'physics.wall-controller',
 } as const;
 
 export type PhysicsComponentKey = (typeof PHYSICS_COMPONENT)[keyof typeof PHYSICS_COMPONENT];
@@ -49,10 +50,11 @@ export function makeTerminalVelocity(x = Infinity, y = 1500): TerminalVelocity {
 // share the same code path.
 export interface CharacterController {
   grounded: boolean;
+  wallSide: -1 | 0 | 1; // last frame's wall contact: -1 left, 1 right, 0 none
 }
 
 export function makeCharacterController(): CharacterController {
-  return { grounded: false };
+  return { grounded: false, wallSide: 0 };
 }
 
 // Jump model: tuning + runtime state for variable height, coyote time, jump
@@ -109,6 +111,27 @@ export function makeMovementController(
     groundDecel: 2600,
     airAccel: 1400,
     airDecel: 800,
+    ...overrides,
+  };
+}
+
+// Wall slide + wall jump tuning + the jump button's edge state. The pure
+// `stepWall` in `wall.ts` caps descent against a wall and launches up-and-away
+// on the press edge. Magnitudes are positive; direction is derived from the
+// contact side. `slideSpeed` is the max downward speed while sliding.
+export interface WallController {
+  slideSpeed: number; // max downward speed while wall-sliding (world u/s)
+  jumpVelocityX: number; // horizontal launch away from the wall
+  jumpVelocityY: number; // vertical launch; applied upward (negative vy)
+  prevJumpHeld: boolean; // runtime: rising-edge detection for the jump button
+}
+
+export function makeWallController(overrides: Partial<WallController> = {}): WallController {
+  return {
+    slideSpeed: 120,
+    jumpVelocityX: 320,
+    jumpVelocityY: 520,
+    prevJumpHeld: false,
     ...overrides,
   };
 }
