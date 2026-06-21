@@ -7,6 +7,7 @@ export const PHYSICS_COMPONENT = {
   Gravity: 'physics.gravity',
   Drag: 'physics.drag',
   TerminalVelocity: 'physics.terminal-velocity',
+  CharacterController: 'physics.character-controller',
 } as const;
 
 export type PhysicsComponentKey = (typeof PHYSICS_COMPONENT)[keyof typeof PHYSICS_COMPONENT];
@@ -38,4 +39,16 @@ export interface TerminalVelocity {
 
 export function makeTerminalVelocity(x = Infinity, y = 1500): TerminalVelocity {
   return { x, y };
+}
+
+// Per-entity character state. Written by the controller each frame from the
+// resolver's collision flags; read by jump / wall-slide / dash logic in later
+// subtasks. Lives on the entity (not the scene) so multiple characters can
+// share the same code path.
+export interface CharacterController {
+  grounded: boolean;
+}
+
+export function makeCharacterController(): CharacterController {
+  return { grounded: false };
 }
