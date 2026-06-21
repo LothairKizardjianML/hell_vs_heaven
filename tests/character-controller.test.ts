@@ -9,7 +9,7 @@ describe('CharacterController', () => {
     expect(PHYSICS_COMPONENT.CharacterController).toBe('physics.character-controller');
   });
 
-  it('factory defaults to grounded: false', () => {
-    expect(makeCharacterController()).toEqual({ grounded: false });
+  it('factory defaults to grounded: false with no wall contact', () => {
+    expect(makeCharacterController()).toEqual({ grounded: false, wallSide: 0 });
   });
 });
