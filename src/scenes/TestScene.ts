@@ -31,12 +31,14 @@ import {
   makeDrag,
   makeTerminalVelocity,
   makeCharacterController,
+  makeJumpController,
   type CharacterController,
+  type JumpController,
 } from '@physics/components';
 import { integrateVelocity } from '@physics/integrator';
+import { stepJump } from '@physics/jump';
 
 const MOVE_SPEED = 220;
-const JUMP_VELOCITY = -560;
 const PLAYER_W = 32;
 const PLAYER_H = 48;
 
@@ -70,7 +72,7 @@ export class TestScene extends Phaser.Scene {
     this.debug = new DebugOverlay(this);
 
     this.add
-      .text(640, 24, 'Arrows move + jump · jump through the blue platform · F1 debug', {
+      .text(640, 24, 'Arrows move · Up to jump (double-jump + coyote) · blue = pass-through · F1 debug', {
         font: '16px monospace',
         color: '#aaaaaa',
       })
@@ -84,6 +86,7 @@ export class TestScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.05);
     applyInputToIntents(this.world, this.player, this.p1Input.read());
     integrateVelocity(this.world, dt);
+    this.stepPlayerJump();
     this.stepPlayerMovement(dt);
     this.stepBouncer(dt);
     this.renderSystem.sync(this.world);
@@ -143,6 +146,11 @@ export class TestScene extends Phaser.Scene {
       PHYSICS_COMPONENT.CharacterController,
       makeCharacterController(),
     );
+    this.world.addComponent(
+      id,
+      PHYSICS_COMPONENT.JumpController,
+      makeJumpController({ jumpVelocity: -560, maxJumps: 2 }),
+    );
     return id;
   }
 
@@ -159,22 +167,42 @@ export class TestScene extends Phaser.Scene {
     return id;
   }
 
+  // Reads the held jump button + last frame's ground contact and applies the
+  // jump model to vy. Runs before movement so the launch velocity is resolved
+  // this frame; `cc.grounded` is one frame stale, which is exactly what the
+  // coyote window wants.
+  private stepPlayerJump(): void {
+    const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
+    const jump = this.world.getComponent<JumpIntent>(this.player, INTENT.Jump)!;
+    const cc = this.world.getComponent<CharacterController>(
+      this.player,
+      PHYSICS_COMPONENT.CharacterController,
+    )!;
+    const jc = this.world.getComponent<JumpController>(
+      this.player,
+      PHYSICS_COMPONENT.JumpController,
+    )!;
+
+    const { vy, jumped } = stepJump(jc, {
+      held: jump.pressed,
+      grounded: cc.grounded,
+      vy: vel.y,
+    });
+    vel.y = vy;
+    if (jumped) eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
+  }
+
   private stepPlayerMovement(dt: number): void {
     const transform = this.world.getComponent<Transform>(this.player, COMPONENT.Transform)!;
     const collider = this.world.getComponent<Collider>(this.player, COMPONENT.Collider)!;
     const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
     const move = this.world.getComponent<MoveIntent>(this.player, INTENT.Move)!;
-    const jump = this.world.getComponent<JumpIntent>(this.player, INTENT.Jump)!;
     const cc = this.world.getComponent<CharacterController>(
       this.player,
       PHYSICS_COMPONENT.CharacterController,
     )!;
 
     if (move.x !== 0) vel.x = move.x * MOVE_SPEED;
-    if (jump.pressed && cc.grounded) {
-      vel.y = JUMP_VELOCITY;
-      eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
-    }
 
     const aabb = aabbFromTransformCollider(transform, collider);
     const { resolved, flags } = resolveAabbMove(aabb, vel.x * dt, vel.y * dt, this.tilemap);

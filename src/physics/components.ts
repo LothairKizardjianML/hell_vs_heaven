@@ -8,6 +8,7 @@ export const PHYSICS_COMPONENT = {
   Drag: 'physics.drag',
   TerminalVelocity: 'physics.terminal-velocity',
   CharacterController: 'physics.character-controller',
+  JumpController: 'physics.jump-controller',
 } as const;
 
 export type PhysicsComponentKey = (typeof PHYSICS_COMPONENT)[keyof typeof PHYSICS_COMPONENT];
@@ -51,4 +52,37 @@ export interface CharacterController {
 
 export function makeCharacterController(): CharacterController {
   return { grounded: false };
+}
+
+// Jump model: tuning + runtime state for variable height, coyote time, jump
+// buffering and multi-jump. The pure `stepJump` in `jump.ts` reads the held
+// button, the grounded flag and current vy, then mutates this each frame.
+// Timers are frame-counted because the sim is fixed-step.
+export interface JumpController {
+  // tuning
+  jumpVelocity: number; // launch vy; negative = up
+  maxJumps: number; // total jumps before landing (1 = single, 2 = double)
+  coyoteFrames: number; // grace window to still ground-jump after leaving ground
+  bufferFrames: number; // grace window for a press made before landing
+  cutMultiplier: number; // vy *= this when released while rising (0..1)
+  // runtime
+  jumpsUsed: number;
+  coyoteTimer: number;
+  bufferTimer: number;
+  prevHeld: boolean;
+}
+
+export function makeJumpController(overrides: Partial<JumpController> = {}): JumpController {
+  return {
+    jumpVelocity: -560,
+    maxJumps: 2,
+    coyoteFrames: 6,
+    bufferFrames: 6,
+    cutMultiplier: 0.5,
+    jumpsUsed: 0,
+    coyoteTimer: 0,
+    bufferTimer: 0,
+    prevHeld: false,
+    ...overrides,
+  };
 }
