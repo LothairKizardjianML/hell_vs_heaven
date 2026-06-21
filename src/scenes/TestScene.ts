@@ -23,17 +23,18 @@ import {
 } from '@input/intents';
 import { KeyboardInputSource, PLAYER1_KEYBOARD } from '@input/keyboard-input-source';
 import { TEXTURE_KEYS } from '@content/assets';
-import { Tilemap } from '@physics/tilemap';
+import { Tilemap, TILE, type TileId } from '@physics/tilemap';
 import { aabbFromTransformCollider, resolveAabbMove } from '@physics/aabb';
 import {
   PHYSICS_COMPONENT,
   makeGravity,
   makeDrag,
   makeTerminalVelocity,
+  makeCharacterController,
+  type CharacterController,
 } from '@physics/components';
 import { integrateVelocity } from '@physics/integrator';
 
-// Tunables for the placeholder demo. Real physics constants live in Phase 2.x.
 const MOVE_SPEED = 220;
 const JUMP_VELOCITY = -560;
 const PLAYER_W = 32;
@@ -43,16 +44,12 @@ const TILE_SIZE = 32;
 const STAGE_COLS = 40;
 const STAGE_ROWS = 22;
 
-// Placeholder scene. The integrator now owns gravity + drag + terminal-velocity
-// for any entity that opts in via the matching components. The character
-// controller (Phase 2.3+) will replace the inline input-driven velocity below.
 export class TestScene extends Phaser.Scene {
   private world!: World;
   private renderSystem!: RenderSystem;
   private tilemap!: Tilemap;
   private player!: EntityId;
   private bouncer!: EntityId;
-  private playerGrounded = false;
   private p1Input!: KeyboardInputSource;
   private debug!: DebugOverlay;
 
@@ -73,7 +70,7 @@ export class TestScene extends Phaser.Scene {
     this.debug = new DebugOverlay(this);
 
     this.add
-      .text(640, 24, 'Arrows move + jump · release to slide · F1 debug', {
+      .text(640, 24, 'Arrows move + jump · jump through the blue platform · F1 debug', {
         font: '16px monospace',
         color: '#aaaaaa',
       })
@@ -94,24 +91,30 @@ export class TestScene extends Phaser.Scene {
   }
 
   private buildStageTilemap(): Tilemap {
-    const grid: number[][] = [];
+    const grid: TileId[][] = [];
     for (let r = 0; r < STAGE_ROWS; r++) {
-      grid.push(new Array(STAGE_COLS).fill(0));
+      grid.push(new Array<TileId>(STAGE_COLS).fill(TILE.Empty));
     }
-    for (let c = 0; c < STAGE_COLS; c++) grid[STAGE_ROWS - 1]![c] = 1;
-    for (let c = 20; c <= 27; c++) grid[14]![c] = 1;
+    for (let c = 0; c < STAGE_COLS; c++) grid[STAGE_ROWS - 1]![c] = TILE.Solid;
+    for (let c = 20; c <= 27; c++) grid[14]![c] = TILE.Solid;
+    // One-way platform — jump up through it from below, land on it from above.
+    for (let c = 8; c <= 15; c++) grid[10]![c] = TILE.OneWayUp;
     return new Tilemap(grid, TILE_SIZE);
   }
 
   private drawTilemap(): void {
     for (let r = 0; r < this.tilemap.rows; r++) {
       for (let c = 0; c < this.tilemap.cols; c++) {
-        if (!this.tilemap.isSolid(c, r)) continue;
         const x = c * TILE_SIZE + TILE_SIZE / 2;
         const y = r * TILE_SIZE + TILE_SIZE / 2;
-        this.add
-          .rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x555555)
-          .setStrokeStyle(1, 0x333333);
+        if (this.tilemap.isSolid(c, r)) {
+          this.add
+            .rectangle(x, y, TILE_SIZE, TILE_SIZE, 0x555555)
+            .setStrokeStyle(1, 0x333333);
+        } else if (this.tilemap.isOneWayUp(c, r)) {
+          // Just the top edge — visual cue for "passable from below".
+          this.add.rectangle(x, r * TILE_SIZE + 3, TILE_SIZE, 6, 0x88aaee);
+        }
       }
     }
   }
@@ -135,6 +138,11 @@ export class TestScene extends Phaser.Scene {
       PHYSICS_COMPONENT.TerminalVelocity,
       makeTerminalVelocity(Infinity, 1500),
     );
+    this.world.addComponent(
+      id,
+      PHYSICS_COMPONENT.CharacterController,
+      makeCharacterController(),
+    );
     return id;
   }
 
@@ -157,12 +165,13 @@ export class TestScene extends Phaser.Scene {
     const vel = this.world.getComponent<Velocity>(this.player, COMPONENT.Velocity)!;
     const move = this.world.getComponent<MoveIntent>(this.player, INTENT.Move)!;
     const jump = this.world.getComponent<JumpIntent>(this.player, INTENT.Jump)!;
+    const cc = this.world.getComponent<CharacterController>(
+      this.player,
+      PHYSICS_COMPONENT.CharacterController,
+    )!;
 
-    // Input overrides drag while a direction is held. Releasing input leaves
-    // vel.x non-zero so the integrator's Drag bleeds it off across a few
-    // frames — Brawlhalla-style slide rather than instant stop.
     if (move.x !== 0) vel.x = move.x * MOVE_SPEED;
-    if (jump.pressed && this.playerGrounded) {
+    if (jump.pressed && cc.grounded) {
       vel.y = JUMP_VELOCITY;
       eventBus.emit(GameEvents.PlayerJumped, { entityId: this.player });
     }
@@ -175,7 +184,7 @@ export class TestScene extends Phaser.Scene {
 
     if (flags.bottom || flags.top) vel.y = 0;
     if (flags.left || flags.right) vel.x = 0;
-    this.playerGrounded = flags.bottom;
+    cc.grounded = flags.bottom;
   }
 
   private stepBouncer(dt: number): void {

@@ -2,10 +2,11 @@
 // axis independently (X first, then Y) — the canonical platformer pattern. A
 // single `sweepAxis` helper handles both directions on both axes; the four
 // branches differ only in (a) which AABB edge leads, (b) which tilemap axis to
-// scan, and (c) which collision flag to set. The sweep walks tile-by-tile from
-// the leading edge's old position to its new position so fast-moving objects
-// don't tunnel through walls. A small EPS keeps the resolved AABB strictly
-// outside the tile face so the next frame doesn't immediately re-collide.
+// scan, (c) which collision flag to set, and (d) which blocking predicate
+// applies. The sweep walks tile-by-tile from the leading edge's old position
+// to its new position so fast-moving objects don't tunnel through walls. A
+// small EPS keeps the resolved AABB strictly outside the tile face so the next
+// frame doesn't immediately re-collide.
 
 import type { Transform, Collider } from '@core/components';
 import type { Tilemap } from './tilemap';
@@ -62,6 +63,8 @@ export function resolveAabbMove(
       perpMax,
       tileSize: size,
       direction: dir,
+      // X axis: only fully-solid tiles block. One-way platforms are never
+      // horizontal walls.
       isSolidAt: (lead, perp) => tilemap.isSolid(lead, perp),
     });
     if (result.hit) {
@@ -77,6 +80,7 @@ export function resolveAabbMove(
     const leadOffset = dir * aabb.halfHeight;
     const perpMin = Math.floor((x - aabb.halfWidth) / size);
     const perpMax = Math.floor((x + aabb.halfWidth - EPS) / size);
+    const oldBottom = aabb.y + aabb.halfHeight;
     const result = sweepAxis({
       leadEdgeOld: aabb.y + leadOffset,
       leadEdgeNew: y + leadOffset,
@@ -84,7 +88,17 @@ export function resolveAabbMove(
       perpMax,
       tileSize: size,
       direction: dir,
-      isSolidAt: (lead, perp) => tilemap.isSolid(perp, lead),
+      isSolidAt: (lead, perp) => {
+        // perp is the column, lead is the row (axis swap relative to X case).
+        if (tilemap.isSolid(perp, lead)) return true;
+        // One-way platforms block only when the AABB is falling AND its bottom
+        // was at or above the tile's top before this step. The tile's top is
+        // `lead * tileSize` (lead is the row of the platform).
+        if (dir > 0 && tilemap.isOneWayUp(perp, lead)) {
+          return oldBottom <= lead * size + EPS;
+        }
+        return false;
+      },
     });
     if (result.hit) {
       y = result.blockedLeadEdge - leadOffset;
