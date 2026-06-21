@@ -28,17 +28,18 @@ import { aabbFromTransformCollider, resolveAabbMove } from '@physics/aabb';
 import {
   PHYSICS_COMPONENT,
   makeGravity,
-  makeDrag,
   makeTerminalVelocity,
   makeCharacterController,
   makeJumpController,
+  makeMovementController,
   type CharacterController,
   type JumpController,
+  type MovementController,
 } from '@physics/components';
 import { integrateVelocity } from '@physics/integrator';
 import { stepJump } from '@physics/jump';
+import { stepHorizontalMove } from '@physics/movement';
 
-const MOVE_SPEED = 220;
 const PLAYER_W = 32;
 const PLAYER_H = 48;
 
@@ -135,7 +136,6 @@ export class TestScene extends Phaser.Scene {
     this.world.addComponent(id, INTENT.Move, makeMoveIntent());
     this.world.addComponent(id, INTENT.Jump, makeJumpIntent());
     this.world.addComponent(id, PHYSICS_COMPONENT.Gravity, makeGravity(1200));
-    this.world.addComponent(id, PHYSICS_COMPONENT.Drag, makeDrag(8));
     this.world.addComponent(
       id,
       PHYSICS_COMPONENT.TerminalVelocity,
@@ -147,6 +147,7 @@ export class TestScene extends Phaser.Scene {
       makeCharacterController(),
     );
     this.world.addComponent(id, PHYSICS_COMPONENT.JumpController, makeJumpController());
+    this.world.addComponent(id, PHYSICS_COMPONENT.MovementController, makeMovementController());
     return id;
   }
 
@@ -197,8 +198,17 @@ export class TestScene extends Phaser.Scene {
       this.player,
       PHYSICS_COMPONENT.CharacterController,
     )!;
+    const mc = this.world.getComponent<MovementController>(
+      this.player,
+      PHYSICS_COMPONENT.MovementController,
+    )!;
 
-    if (move.x !== 0) vel.x = move.x * MOVE_SPEED;
+    vel.x = stepHorizontalMove(mc, {
+      moveX: move.x,
+      grounded: cc.grounded,
+      vx: vel.x,
+      dt,
+    });
 
     const aabb = aabbFromTransformCollider(transform, collider);
     const { resolved, flags } = resolveAabbMove(aabb, vel.x * dt, vel.y * dt, this.tilemap);
